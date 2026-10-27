@@ -47,13 +47,36 @@ const RULES = [
 ].map(([name,category,condition,rule])=>({name,category,condition,rule}));
 const CATEGORIES=['서류','전자기기','의류','세면','건강','기타'];
 const KEY='travel-packing-v1';
-const saved=JSON.parse(localStorage.getItem(KEY)||'null')||{conditions:{region:'해외',season:'봄가을',companion:'성인',nights:2},checked:[],custom:[],remainingOnly:false};
-let state=saved;
+const CUSTOM_KEY='travel-packing-custom-v1';
+const CHECKED_KEY='travel-packing-checked-v1';
+const saved=JSON.parse(localStorage.getItem(KEY)||'null')||{conditions:{region:'해외',season:'봄가을',companion:'성인',nights:2},remainingOnly:false};
+const oldCustom=Array.isArray(saved.custom)?saved.custom:[];
+const oldChecked=Array.isArray(saved.checked)?saved.checked:[];
+const storedCustom=localStorage.getItem(CUSTOM_KEY);
+const storedChecked=localStorage.getItem(CHECKED_KEY);
+// 직접 추가한 물건과 체크 기록은 조건 선택과 별도의 저장소에 보관합니다.
+let state={
+  conditions:{region:'해외',season:'봄가을',companion:'성인',nights:2,...(saved.conditions||{})},
+  remainingOnly:Boolean(saved.remainingOnly),
+  custom:storedCustom===null?oldCustom:JSON.parse(storedCustom),
+  checked:storedChecked===null?oldChecked:JSON.parse(storedChecked)
+};
 const $=s=>document.querySelector(s); const esc=s=>String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-function persist(){localStorage.setItem(KEY,JSON.stringify(state));}
+function persist(){
+  // 조건과 보기 상태만 조건 저장소에 기록합니다.
+  localStorage.setItem(KEY,JSON.stringify({conditions:state.conditions,remainingOnly:state.remainingOnly}));
+  // 직접 추가 항목과 체크 기록은 조건을 바꿔도 절대 덮어쓰지 않습니다.
+  localStorage.setItem(CUSTOM_KEY,JSON.stringify(state.custom));
+  localStorage.setItem(CHECKED_KEY,JSON.stringify(state.checked));
+}
 function quantity(rule){if(typeof rule==='number')return rule;if(rule==='일수')return state.conditions.nights;if(rule==='일수+1')return state.conditions.nights+1;if(rule==='올림(일수/2)')return Math.ceil(state.conditions.nights/2);return 1;}
 function applicable(item){return item.condition==='항상'||item.condition===state.conditions.region||item.condition===state.conditions.season||(item.condition==='아이동반'&&state.conditions.companion==='아이동반');}
-function allItems(){return RULES.filter(applicable).map(x=>({...x,count:quantity(x.rule),custom:false})).concat(state.custom.map(x=>({...x,category:'기타',custom:true,count:x.count,condition:'직접 추가'})));}
+function allItems(){
+  const matched=RULES.filter(applicable).map(x=>({...x,count:quantity(x.rule),custom:false}));
+  // 조건과 무관한 직접 추가 목록을 항상 마지막에 붙입니다.
+  const custom=state.custom.map(x=>({...x,category:'기타',custom:true,count:x.count,condition:'직접 추가'}));
+  return matched.concat(custom);
+}
 function render(){const items=allItems();const shown=state.remainingOnly?items.filter(x=>!state.checked.includes(x.name)):items;let html='';for(const category of CATEGORIES){const rows=shown.filter(x=>x.category===category);if(!rows.length)continue;html+=`<section class="category"><h2 class="category-title">${category}</h2>`;for(const x of rows){const done=state.checked.includes(x.name);html+=`<div class="item ${done?'done':''}" data-name="${esc(x.name)}" role="checkbox" aria-checked="${done}"><input type="checkbox" tabindex="-1" ${done?'checked':''} aria-label="${esc(x.name)}"><div class="item-main"><div class="item-name">${esc(x.name)}</div><small>${esc(x.condition)}</small></div><span class="item-count">${x.count}개</span></div>`}html+='</section>'}$('#list').innerHTML=html||'<div class="panel empty">남은 준비물이 없습니다.</div>';updateProgress(items);}
 function updateProgress(items=allItems()){const done=items.filter(x=>state.checked.includes(x.name)).length;const total=items.length;const pct=total?Math.round(done/total*100):0;$('#progressText').textContent=`${done} / ${total}개 챙김`;$('#progressPercent').textContent=`${pct}%`;$('#progressFill').style.width=pct+'%';$('#toggleRemaining').textContent=state.remainingOnly?'전체 보기':'남은 것만 보기';}
 function syncControls(){document.querySelectorAll('.choice').forEach(b=>b.setAttribute('aria-pressed',b.dataset.value===state.conditions[b.dataset.key]));$('#nights').textContent=state.conditions.nights;}
