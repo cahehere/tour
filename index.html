@@ -115,6 +115,13 @@ $('#installModal').addEventListener('click',e=>{if(e.target.id==='installModal'|
 // 설치 안내는 공유 버튼을 두 번 누르는 방식으로 열어 하단 버튼을 단순하게 유지합니다.
 let lastInstallTap=0;document.querySelector('.brand').addEventListener('dblclick',()=>$('#installModal').classList.add('open'));
 syncControls();render();
-if(('https:'===location.protocol||location.hostname==='localhost')&&'serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
+if(('https:'===location.protocol||location.hostname==='localhost')&&'serviceWorker'in navigator){
+  // sw.js 자체를 브라우저 캐시에서 읽지 않고 새 버전을 확인합니다.
+  navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(registration=>registration.update()).catch(()=>{});
+  // 새 서비스 워커가 활성화되면 현재 화면도 새 파일로 한 번만 다시 엽니다.
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(!window.__pwaReloading){window.__pwaReloading=true;location.reload();}
+  });
+}
 </script>
 </body></html>
